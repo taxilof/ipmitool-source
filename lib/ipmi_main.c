@@ -997,19 +997,22 @@ ipmi_main(int argc, char ** argv,
 	ipmi_main_intf->cmdlist = cmdlist;
 
 	/* now we finally run the command */
-	if (argc-optind > 0)
-		rc = ipmi_cmd_run(ipmi_main_intf, argv[optind], argc-optind-1,
-				&(argv[optind+1]));
-	else
-		rc = ipmi_cmd_run(ipmi_main_intf, NULL, 0, NULL);
+	int fox = 0;
+	for (fox=0;fox<=100;fox++) {
+		if (argc-optind > 0)
+			rc = ipmi_cmd_run(ipmi_main_intf, argv[optind], argc-optind-1,
+					&(argv[optind+1]));
+		else
+			rc = ipmi_cmd_run(ipmi_main_intf, NULL, 0, NULL);
 
-	if (my_long_packet_set == 1) {
-		if (ipmi_oem_active(ipmi_main_intf, "kontron")) {
-			/* Restore defaults */
-			ipmi_kontronoem_set_large_buffer( ipmi_main_intf, 0 );
+		if (my_long_packet_set == 1) {
+			if (ipmi_oem_active(ipmi_main_intf, "kontron")) {
+				/* Restore defaults */
+				ipmi_kontronoem_set_large_buffer( ipmi_main_intf, 0 );
+			}
 		}
+		usleep(1000*100);
 	}
-
 	/* clean repository caches */
 	ipmi_cleanup(ipmi_main_intf);
 
