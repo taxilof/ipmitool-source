@@ -1555,9 +1555,15 @@ ipmi_sdr_print_sensor_fc(struct ipmi_intf *intf,
 
 	if (csv_output) {
 		/*
-		 * print sensor name, reading, unit, state
+		 * print time, sensor name, reading, unit, state
 		 */
+		struct timeval tv;
+		gettimeofday(&tv,NULL);
+		printf("%u.%03u,", (unsigned)tv.tv_sec, (unsigned)tv.tv_usec/1000);
+
+		/* sensor name */
 		printf("%s,", sr->s_id);
+
 		if (!IS_THRESHOLD_SENSOR(sensor)) {
 			/* Discrete/Non-Threshold */
 			print_csv_discrete(sensor, sr);

@@ -74,13 +74,14 @@
 #endif
 
 #ifdef ENABLE_ALL_OPTIONS
-# define OPTION_STRING	"I:hVvcgsEKYao:H:d:P:f:U:p:C:L:A:t:T:m:z:S:l:b:B:e:k:y:O:R:N:D:"
+# define OPTION_STRING	"I:hVvcigsEKYao:H:d:P:f:U:p:C:L:A:t:T:m:z:S:l:b:B:e:k:y:O:R:N:D:"
 #else
-# define OPTION_STRING	"I:hVvcH:f:U:p:d:S:D:"
+# define OPTION_STRING	"I:hVvciH:f:U:p:d:S:D:"
 #endif
 
 extern int verbose;
 extern int csv_output;
+extern int loop_output;
 extern const struct valstr ipmi_privlvl_vals[];
 extern const struct valstr ipmi_authtype_session_vals[];
 
@@ -476,6 +477,9 @@ ipmi_main(int argc, char ** argv,
 			break;
 		case 'c':
 			csv_output = 1;
+			break;
+		case 'i':
+			loop_output = 1;
 			break;
 		case 'H':
 			if (hostname) {
@@ -997,8 +1001,8 @@ ipmi_main(int argc, char ** argv,
 	ipmi_main_intf->cmdlist = cmdlist;
 
 	/* now we finally run the command */
-	int fox = 0;
-	for (fox=0;fox<=100;fox++) {
+
+	do {
 		if (argc-optind > 0)
 			rc = ipmi_cmd_run(ipmi_main_intf, argv[optind], argc-optind-1,
 					&(argv[optind+1]));
@@ -1011,8 +1015,11 @@ ipmi_main(int argc, char ** argv,
 				ipmi_kontronoem_set_large_buffer( ipmi_main_intf, 0 );
 			}
 		}
-		usleep(1000*100);
-	}
+		/* empty sdr list, b/c sensor readings can depend on factors */
+		ipmi_sdr_list_empty(ipmi_main_intf);
+		/* wait some time (100ms) */
+		/* usleep(1000*100); */
+	} while(loop_output);
 	/* clean repository caches */
 	ipmi_cleanup(ipmi_main_intf);
 
