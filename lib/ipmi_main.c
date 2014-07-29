@@ -1015,10 +1015,8 @@ ipmi_main(int argc, char ** argv,
 				ipmi_kontronoem_set_large_buffer( ipmi_main_intf, 0 );
 			}
 		}
-		/* empty sdr list, b/c sensor readings can depend on factors */
-		ipmi_sdr_list_empty(ipmi_main_intf);
 		/* wait some time (100ms) */
-		/* usleep(1000*100); */
+		 usleep(1000*100);
 	} while(loop_output);
 	/* clean repository caches */
 	ipmi_cleanup(ipmi_main_intf);

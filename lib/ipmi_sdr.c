@@ -3768,6 +3768,231 @@ ipmi_sdr_find_sdr_bytype(struct ipmi_intf *intf, uint8_t type)
 	return head;
 }
 
+/* ipmi_sdr_find_sdr_byid  -  lookup SDR entry by ID string (but fetch a fresh copy of record with IPMI)
+ *
+ * @intf:	ipmi interface
+ * @id:		string to match for sensor name
+ *
+ * returns pointer to SDR list
+ * returns NULL on error
+ */
+struct sdr_record_list *
+ipmi_sdr_find_sdr_byid_fresh(struct ipmi_intf *intf, char *id) {
+	struct sdr_get_rs *header;
+	struct sdr_get_rs *header2;
+	struct sdr_record_list *e;
+	struct sdr_record_list *record_found = NULL;
+	int idlen;
+
+	if (id == NULL)
+		return NULL;
+
+	idlen = strlen(id);
+
+	if (sdr_list_itr == NULL) {
+		sdr_list_itr = ipmi_sdr_start(intf, 0);
+		if (sdr_list_itr == NULL) {
+			lprintf(LOG_ERR, "Unable to open SDR for reading");
+			return NULL;
+		}
+	}
+
+	/* make sure that local SDR is populated */
+	if (sdr_list_head == NULL) {
+		/* fetch complete SDR */
+		while ((header = ipmi_sdr_get_next_header(intf, sdr_list_itr)) != NULL) {
+			uint8_t *rec;
+			struct sdr_record_list *sdrr;
+
+			sdrr = malloc(sizeof (struct sdr_record_list));
+			if (sdrr == NULL) {
+				lprintf(LOG_ERR, "ipmitool: malloc failure");
+				break;
+			}
+			memset(sdrr, 0, sizeof (struct sdr_record_list));
+			sdrr->id = header->id;
+			sdrr->type = header->type;
+
+			rec = ipmi_sdr_get_record(intf, header, sdr_list_itr);
+			if (rec == NULL) {
+				if (sdrr != NULL) {
+					free(sdrr);
+					sdrr = NULL;
+				}
+				continue;
+			}
+
+			sdrr->length = header->length;
+			switch (header->type) {
+			case SDR_RECORD_TYPE_FULL_SENSOR:
+				sdrr->record.full =
+				    (struct sdr_record_full_sensor *) rec;
+				break;
+			case SDR_RECORD_TYPE_COMPACT_SENSOR:
+				sdrr->record.compact =
+				    (struct sdr_record_compact_sensor *) rec;
+				break;
+			case SDR_RECORD_TYPE_EVENTONLY_SENSOR:
+				sdrr->record.eventonly =
+				    (struct sdr_record_eventonly_sensor *) rec;
+				break;
+			case SDR_RECORD_TYPE_GENERIC_DEVICE_LOCATOR:
+				sdrr->record.genloc =
+				    (struct sdr_record_generic_locator *) rec;
+				break;
+			case SDR_RECORD_TYPE_FRU_DEVICE_LOCATOR:
+				sdrr->record.fruloc =
+				    (struct sdr_record_fru_locator *) rec;
+				break;
+			case SDR_RECORD_TYPE_MC_DEVICE_LOCATOR:
+				sdrr->record.mcloc =
+				    (struct sdr_record_mc_locator *) rec;
+				break;
+			case SDR_RECORD_TYPE_ENTITY_ASSOC:
+				sdrr->record.entassoc =
+				    (struct sdr_record_entity_assoc *) rec;
+				break;
+			default:
+				free(rec);
+				rec = NULL;
+				if (sdrr != NULL) {
+					free(sdrr);
+					sdrr = NULL;
+				}
+				continue;
+			}
+
+			/* add to global record liset */
+			if (sdr_list_head == NULL)
+				sdr_list_head = sdrr;
+			else
+				sdr_list_tail->next = sdrr;
+
+			sdr_list_tail = sdrr;
+
+		}
+	}
+
+
+	/* search local SDR for id string */
+	for (e = sdr_list_head; e != NULL; e = e->next) {
+		switch (e->type) {
+		case SDR_RECORD_TYPE_FULL_SENSOR:
+			if (!strncmp((const char *)e->record.full->id_string,
+				     (const char *)id,
+				     __max(e->record.full->id_code & 0x1f, idlen)))
+				record_found = e;
+			break;
+		case SDR_RECORD_TYPE_COMPACT_SENSOR:
+			if (!strncmp((const char *)e->record.compact->id_string,
+				     (const char *)id,
+				     __max(e->record.compact->id_code & 0x1f, idlen)))
+				record_found = e;
+			break;
+		case SDR_RECORD_TYPE_EVENTONLY_SENSOR:
+			if (!strncmp((const char *)e->record.eventonly->id_string,
+				     (const char *)id,
+				     __max(e->record.eventonly->id_code & 0x1f, idlen)))
+				record_found = e;
+			break;
+		case SDR_RECORD_TYPE_GENERIC_DEVICE_LOCATOR:
+			if (!strncmp((const char *)e->record.genloc->id_string,
+				     (const char *)id,
+				     __max(e->record.genloc->id_code & 0x1f, idlen)))
+				record_found = e;
+			break;
+		case SDR_RECORD_TYPE_FRU_DEVICE_LOCATOR:
+			if (!strncmp((const char *)e->record.fruloc->id_string,
+				     (const char *)id,
+				     __max(e->record.fruloc->id_code & 0x1f, idlen)))
+				record_found = e;
+			break;
+		case SDR_RECORD_TYPE_MC_DEVICE_LOCATOR:
+			if (!strncmp((const char *)e->record.mcloc->id_string,
+				     (const char *)id,
+				     __max(e->record.mcloc->id_code & 0x1f, idlen)))
+				record_found = e;
+			break;
+		}
+		/* if found, break so we can fetch it fresh */
+		if (record_found != NULL) {
+			break;
+		}
+	}
+
+	/* if we found the corresponding record local, build header and fetch from
+	 * remote host with IPMI
+	 */
+
+	if (record_found == NULL) {
+		return NULL;
+	} else {
+		header2 = malloc(sizeof(struct sdr_get_rs));
+		header2->id = record_found->id;
+		header2->type = record_found->type;
+		header2->length = record_found->length;
+
+		uint8_t *rec;
+		struct sdr_record_list *sdrr;
+
+		sdrr = malloc(sizeof (struct sdr_record_list));
+		if (sdrr == NULL) {
+			lprintf(LOG_ERR, "ipmitool: malloc failure");
+			return NULL;
+		}
+		memset(sdrr, 0, sizeof (struct sdr_record_list));
+		sdrr->id = header2->id;
+		sdrr->type = header2->type;
+
+		/* get fresh record and return it */
+		rec = ipmi_sdr_get_record(intf, header2, sdr_list_itr);
+		sdrr->length = header2->length;
+		switch (header2->type) {
+		case SDR_RECORD_TYPE_FULL_SENSOR:
+			sdrr->record.full =
+			    (struct sdr_record_full_sensor *) rec;
+			break;
+		case SDR_RECORD_TYPE_COMPACT_SENSOR:
+			sdrr->record.compact =
+			    (struct sdr_record_compact_sensor *) rec;
+			break;
+		case SDR_RECORD_TYPE_EVENTONLY_SENSOR:
+			sdrr->record.eventonly =
+			    (struct sdr_record_eventonly_sensor *) rec;
+			break;
+		case SDR_RECORD_TYPE_GENERIC_DEVICE_LOCATOR:
+			sdrr->record.genloc =
+			    (struct sdr_record_generic_locator *) rec;
+			break;
+		case SDR_RECORD_TYPE_FRU_DEVICE_LOCATOR:
+			sdrr->record.fruloc =
+			    (struct sdr_record_fru_locator *) rec;
+			break;
+		case SDR_RECORD_TYPE_MC_DEVICE_LOCATOR:
+			sdrr->record.mcloc =
+			    (struct sdr_record_mc_locator *) rec;
+			break;
+		case SDR_RECORD_TYPE_ENTITY_ASSOC:
+			sdrr->record.entassoc =
+			    (struct sdr_record_entity_assoc *) rec;
+			break;
+		default:
+			free(rec);
+			rec = NULL;
+			if (sdrr != NULL) {
+				free(sdrr);
+				sdrr = NULL;
+			}
+		}
+		free(header2);
+		return sdrr;
+	}
+
+
+}
+
+
+
 /* ipmi_sdr_find_sdr_byid  -  lookup SDR entry by ID string
  *
  * @intf:	ipmi interface
@@ -4629,13 +4854,16 @@ ipmi_sdr_print_entry_byid(struct ipmi_intf *intf, int argc, char **argv)
 	verbose = 1;
 
 	for (i = 0; i < argc; i++) {
-		sdr = ipmi_sdr_find_sdr_byid(intf, argv[i]);
+		sdr = ipmi_sdr_find_sdr_byid_fresh(intf, argv[i]);
 		if (sdr == NULL) {
 			lprintf(LOG_ERR, "Unable to find sensor id '%s'",
 				argv[i]);
 		} else {
 			if (ipmi_sdr_print_listentry(intf, sdr) < 0)
 				rc = -1;
+			/* we must free it, because we got it fresh and not from local SDR */
+			free(sdr->record.full);
+			free(sdr);
 		}
 	}
 
