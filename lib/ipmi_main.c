@@ -74,14 +74,15 @@
 #endif
 
 #ifdef ENABLE_ALL_OPTIONS
-# define OPTION_STRING	"I:hVvcigsEKYao:H:d:P:f:U:p:C:L:A:t:T:m:z:S:l:b:B:e:k:y:O:R:N:D:"
+# define OPTION_STRING	"I:hVvcgsEKYao:H:d:P:f:U:p:C:L:A:t:T:m:z:S:l:b:B:e:k:y:O:R:N:D:i:"
 #else
-# define OPTION_STRING	"I:hVvciH:f:U:p:d:S:D:"
+# define OPTION_STRING	"I:hVvcH:f:U:p:d:S:D:i:"
 #endif
 
 extern int verbose;
 extern int csv_output;
 extern int loop_output;
+int loop_output_wait_time = 0;
 extern const struct valstr ipmi_privlvl_vals[];
 extern const struct valstr ipmi_authtype_session_vals[];
 
@@ -218,6 +219,7 @@ ipmi_option_usage(const char * progname, struct ipmi_cmd * cmdlist, struct ipmi_
 	lprintf(LOG_NOTICE, "       -V             Show version information");
 	lprintf(LOG_NOTICE, "       -v             Verbose (can use multiple times)");
 	lprintf(LOG_NOTICE, "       -c             Display output in comma separated format");
+	lprintf(LOG_NOTICE, "       -i ms          Infinite Querys and Output (only in CSV and 'sdr get'), ms is waittime between querys");
 	lprintf(LOG_NOTICE, "       -d N           Specify a /dev/ipmiN device to use (default=0)");
 	lprintf(LOG_NOTICE, "       -I intf        Interface to use");
 	lprintf(LOG_NOTICE, "       -H hostname    Remote host name for LAN interface");
@@ -480,6 +482,13 @@ ipmi_main(int argc, char ** argv,
 			break;
 		case 'i':
 			loop_output = 1;
+			if (str2int(optarg, &loop_output_wait_time) != 0) {
+				lprintf(LOG_ERR, "waittime %i is invalid.", loop_output_wait_time);
+				rc = -1;
+				goto out_free;
+			}
+			// reduce waittime, because we are lazy and just sleep instead of wait
+			if (loop_output_wait_time > 1) loop_output_wait_time = loop_output_wait_time -2;
 			break;
 		case 'H':
 			if (hostname) {
@@ -1016,7 +1025,9 @@ ipmi_main(int argc, char ** argv,
 			}
 		}
 		/* wait some time (100ms) */
-		 usleep(1000*100);
+		if (loop_output_wait_time) {
+			usleep(1000*loop_output_wait_time);
+		}
 	} while(loop_output);
 	/* clean repository caches */
 	ipmi_cleanup(ipmi_main_intf);

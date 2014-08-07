@@ -63,6 +63,9 @@ static int sdr_max_read_len = 0;
 static int sdr_extended = 0;
 static long sdriana = 0;
 
+
+static unsigned csv_start_ms = 0;
+
 static struct sdr_record_list *sdr_list_head = NULL;
 static struct sdr_record_list *sdr_list_tail = NULL;
 static struct ipmi_sdr_iterator *sdr_list_itr = NULL;
@@ -1559,7 +1562,13 @@ ipmi_sdr_print_sensor_fc(struct ipmi_intf *intf,
 		 */
 		struct timeval tv;
 		gettimeofday(&tv,NULL);
-		printf("%u.%03u,", (unsigned)tv.tv_sec, (unsigned)tv.tv_usec/1000);
+		// save time at startup (and print csv header)
+		if (csv_start_ms == 0) {
+			csv_start_ms = (unsigned)tv.tv_usec/1000+tv.tv_sec*1000;
+			printf("time,name,value,unit,status\n");
+		}
+		//printf("%u.%03u,", (unsigned)tv.tv_sec-csv_start_s, (unsigned)tv.tv_usec/1000-csv_start_s);
+		printf("%u,", (unsigned) (tv.tv_usec/1000+tv.tv_sec*1000)-csv_start_ms);
 
 		/* sensor name */
 		printf("%s,", sr->s_id);
@@ -4851,7 +4860,7 @@ ipmi_sdr_print_entry_byid(struct ipmi_intf *intf, int argc, char **argv)
 	}
 
 	v = verbose;
-	verbose = 1;
+	verbose = 0;
 
 	for (i = 0; i < argc; i++) {
 		sdr = ipmi_sdr_find_sdr_byid_fresh(intf, argv[i]);
@@ -4889,9 +4898,10 @@ ipmi_sdr_main(struct ipmi_intf *intf, int argc, char **argv)
 	/* initialize random numbers used later */
 	srand(time(NULL));
 
-	if (argc == 0)
+	if (argc == 0) {
+		loop_output = 0;
 		return ipmi_sdr_print_sdr(intf, 0xfe);
-	else if (strncmp(argv[0], "help", 4) == 0) {
+	} else if (strncmp(argv[0], "help", 4) == 0) {
 		printf_sdr_usage();
 	} else if (strncmp(argv[0], "list", 4) == 0
 		   || strncmp(argv[0], "elist", 5) == 0) {
