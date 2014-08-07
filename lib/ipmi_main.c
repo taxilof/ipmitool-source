@@ -74,14 +74,15 @@
 #endif
 
 #ifdef ENABLE_ALL_OPTIONS
-# define OPTION_STRING	"I:hVvcgsEKYao:H:d:P:f:U:p:C:L:A:t:T:m:z:S:l:b:B:e:k:y:O:R:N:D:i:"
+# define OPTION_STRING	"I:hFVvcgsEKYao:H:d:P:f:U:p:C:L:A:t:T:m:z:S:l:b:B:e:k:y:O:R:N:D:i:"
 #else
-# define OPTION_STRING	"I:hVvcH:f:U:p:d:S:D:i:"
+# define OPTION_STRING	"I:hFVvcH:f:U:p:d:S:D:i:"
 #endif
 
 extern int verbose;
 extern int csv_output;
 extern int loop_output;
+extern int loop_output_file;
 int loop_output_wait_time = 0;
 extern const struct valstr ipmi_privlvl_vals[];
 extern const struct valstr ipmi_authtype_session_vals[];
@@ -220,6 +221,7 @@ ipmi_option_usage(const char * progname, struct ipmi_cmd * cmdlist, struct ipmi_
 	lprintf(LOG_NOTICE, "       -v             Verbose (can use multiple times)");
 	lprintf(LOG_NOTICE, "       -c             Display output in comma separated format");
 	lprintf(LOG_NOTICE, "       -i ms          Infinite Querys and Output (only in CSV and 'sdr get'), ms is waittime between querys");
+	lprintf(LOG_NOTICE, "       -F             For use with -i, appends data to extra <sensorid>.csv");
 	lprintf(LOG_NOTICE, "       -d N           Specify a /dev/ipmiN device to use (default=0)");
 	lprintf(LOG_NOTICE, "       -I intf        Interface to use");
 	lprintf(LOG_NOTICE, "       -H hostname    Remote host name for LAN interface");
@@ -272,7 +274,8 @@ ipmi_option_usage(const char * progname, struct ipmi_cmd * cmdlist, struct ipmi_
 void ipmi_catch_sigint()
 {
 	if (ipmi_main_intf != NULL) {
-		printf("\nSIGN INT: Close Interface %s\n",ipmi_main_intf->desc);
+		if (loop_output == 0 )
+			printf("\nSIGN INT: Close Interface %s\n",ipmi_main_intf->desc);
 		ipmi_main_intf->close(ipmi_main_intf);
 	}
 	exit(-1);
@@ -479,6 +482,9 @@ ipmi_main(int argc, char ** argv,
 			break;
 		case 'c':
 			csv_output = 1;
+			break;
+		case 'F':
+			loop_output_file = 1;
 			break;
 		case 'i':
 			loop_output = 1;

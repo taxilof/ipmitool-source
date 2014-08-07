@@ -68,6 +68,7 @@
 extern int verbose;
 extern int csv_output;
 extern int loop_output;
+extern int loop_output_file;
 
 struct ipmi_rq {
 	struct {

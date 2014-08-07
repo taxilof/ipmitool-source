@@ -1557,15 +1557,30 @@ ipmi_sdr_print_sensor_fc(struct ipmi_intf *intf,
 	 */
 
 	if (csv_output) {
+
+		// implement -F option with a stdout hijack...
+		FILE * file;
+		if (loop_output_file == 1) {
+			char buff[17+4];
+			strcpy(buff, sr->s_id);
+			strcat(buff, ".csv");
+			file = freopen(buff, "a", stdout);
+			if (ftell(file) == 0)
+				printf("time,name,value,unit,status\n");
+		}
+
 		/*
 		 * print time, sensor name, reading, unit, state
 		 */
+
 		struct timeval tv;
 		gettimeofday(&tv,NULL);
 		// save time at startup (and print csv header)
 		if (csv_start_ms == 0) {
 			csv_start_ms = (unsigned)tv.tv_usec/1000+tv.tv_sec*1000;
-			printf("time,name,value,unit,status\n");
+			/* if file-ctrl did not print header, we must do it*/
+			if (loop_output_file == 0)
+				printf("time,name,value,unit,status\n");
 		}
 		//printf("%u.%03u,", (unsigned)tv.tv_sec-csv_start_s, (unsigned)tv.tv_usec/1000-csv_start_s);
 		printf("%u,", (unsigned) (tv.tv_usec/1000+tv.tv_sec*1000)-csv_start_ms);
@@ -1637,6 +1652,11 @@ ipmi_sdr_print_sensor_fc(struct ipmi_intf *intf,
 				}
 			}
 			printf("\n");
+		}
+		/* clean up */
+		if (loop_output_file == 1) {
+			fclose(file);
+			//stdout = freopen("/dev/stdout", "w", file);
 		}
 
 		return 0;	/* done */
